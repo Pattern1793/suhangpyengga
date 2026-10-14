@@ -437,9 +437,7 @@ function buildPopup(place) {
 
   if (place.type === "library") {
     const row = place.row || {};
-    const closedText = getClosedText(row["휴관일"], new Date());
     const hours = getTodayHours(row);
-    html += `<div class="popup-line"><b>오늘 휴관 여부:</b> ${escapeHTML(closedText)}</div>`;
     html += `<div class="popup-line"><b>오늘 운영시간:</b> ${escapeHTML(hours)}</div>`;
     if (row["휴관일"]) html += `<div class="popup-line"><b>등록된 휴관일:</b> ${escapeHTML(row["휴관일"])}</div>`;
     if (row["도서관전화번호"]) html += `<div class="popup-line"><b>전화:</b> ${escapeHTML(row["도서관전화번호"])}</div>`;
