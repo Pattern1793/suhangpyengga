@@ -439,7 +439,6 @@ function buildPopup(place) {
     const row = place.row || {};
     const hours = getTodayHours(row);
     html += `<div class="popup-line"><b>오늘 운영시간:</b> ${escapeHTML(hours)}</div>`;
-    if (row["휴관일"]) html += `<div class="popup-line"><b>등록된 휴관일:</b> ${escapeHTML(row["휴관일"])}</div>`;
     if (row["도서관전화번호"]) html += `<div class="popup-line"><b>전화:</b> ${escapeHTML(row["도서관전화번호"])}</div>`;
     if (row["홈페이지주소"]) {
       let url = normalize(row["홈페이지주소"]);
