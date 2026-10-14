@@ -382,14 +382,23 @@ function renderList(places) {
     item.append(name, address);
 
     if (place.type === "library") {
-      const hours = getTodayHours(place.row);
-      const closed = isClosedToday(place.row["휴관일"], new Date());
-      const detail = document.createElement("div");
-      detail.className = "detail";
-      detail.textContent = (closed ? "오늘 휴관 가능성 있음" : "오늘 휴관일 규칙 확인 필요") + " · 운영시간 " + hours;
-      item.appendChild(detail);
-    }
+    const hours = getTodayHours(place.row);
+    const closed = isClosedToday(place.row["휴관일"], new Date());
 
+    const detail = document.createElement("div");
+    detail.className = "detail";
+
+    const status = document.createElement("span");
+    status.className = closed ? "closed-status" : "open-status";
+    status.textContent = closed ? "오늘 휴관일" : "오늘 개관일";
+
+    detail.append(
+        status,
+        document.createTextNode(" · 운영시간 " + hours)
+    );
+
+    item.appendChild(detail);
+}
     item.addEventListener("click", () => {
       if (place.lat == null || place.lng == null) return;
       map.panTo(new kakao.maps.LatLng(place.lat, place.lng));
