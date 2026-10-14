@@ -52,7 +52,7 @@ select{width:100%;padding:10px;border:1px solid #d5dce2;border-radius:7px;backgr
 </div>
 
 <!-- 아래 키를 실제 카카오 JavaScript 키로 바꾸고, 카카오 개발자 콘솔에 실행 도메인을 등록해. -->
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=123456789&libraries=services&autoload=false"></script>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=57ef9bb08de92bce05226eb47898fc02&libraries=services&autoload=false"></script>
 <script>
 "use strict";
 
@@ -373,10 +373,9 @@ function renderList(places) {
 
     if (place.type === "library") {
       const hours = getTodayHours(place.row);
-      const closed = isClosedToday(place.row["휴관일"], new Date());
       const detail = document.createElement("div");
       detail.className = "detail";
-      detail.textContent = (closed ? "오늘 휴관 가능성 있음" : "오늘 휴관일 규칙 확인 필요") + " · 운영시간 " + hours;
+      detail.textContent = "운영시간 " + hours;
       item.appendChild(detail);
     }
 
@@ -438,9 +437,7 @@ function buildPopup(place) {
 
   if (place.type === "library") {
     const row = place.row || {};
-    const closedText = getClosedText(row["휴관일"], new Date());
     const hours = getTodayHours(row);
-    html += `<div class="popup-line"><b>오늘 휴관 여부:</b> ${escapeHTML(closedText)}</div>`;
     html += `<div class="popup-line"><b>오늘 운영시간:</b> ${escapeHTML(hours)}</div>`;
     if (row["휴관일"]) html += `<div class="popup-line"><b>등록된 휴관일:</b> ${escapeHTML(row["휴관일"])}</div>`;
     if (row["도서관전화번호"]) html += `<div class="popup-line"><b>전화:</b> ${escapeHTML(row["도서관전화번호"])}</div>`;
@@ -493,32 +490,6 @@ function isPublicHoliday(date) {
   const month = date.getMonth() + 1, day = date.getDate();
   const fixed = ["1-1","3-1","5-5","6-6","8-15","10-3","10-9","12-25"];
   return fixed.includes(`${month}-${day}`);
-}
-
-function isClosedToday(holidayText, date) {
-  const text = normalize(holidayText);
-  if (!text) return false;
-
-  const dayNames = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
-  const todayName = dayNames[date.getDay()];
-
-  // 휴관일 텍스트에 요일이 명시되어 있는 경우를 확인해.
-  if (text.includes(todayName)) return true;
-  if (date.getDay() === 0 && /매주\s*일요일|일요일/.test(text)) return true;
-  if (date.getDay() === 1 && /매주\s*월요일|월요일/.test(text)) return true;
-
-  // 매년 반복되는 양력 날짜 형식(예: 1월 1일)이 명시된 경우를 확인해.
-  const datePattern = new RegExp(`${date.getMonth()+1}\\s*월\\s*${date.getDate()}\\s*일`);
-  if (datePattern.test(text)) return true;
-
-  if (isPublicHoliday(date) && /공휴일/.test(text)) return true;
-  return false;
-}
-
-function getClosedText(holidayText, date) {
-  if (isClosedToday(holidayText, date)) return "휴관일 규칙에 해당할 수 있어";
-  if (!normalize(holidayText)) return "휴관일 정보 없음";
-  return "등록된 휴관일 규칙과 일치하지 않음";
 }
 
 // 날짜가 바뀌면 휴관일·운영시간을 다시 계산하고 목록의 내용을 갱신해.
