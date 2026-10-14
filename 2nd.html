@@ -373,10 +373,9 @@ function renderList(places) {
 
     if (place.type === "library") {
       const hours = getTodayHours(place.row);
-      const closed = isClosedToday(place.row["휴관일"], new Date());
       const detail = document.createElement("div");
       detail.className = "detail";
-      detail.textContent = (closed ? "오늘 휴관 가능성 있음" : "오늘 휴관일 규칙 확인 필요") + " · 운영시간 " + hours;
+      detail.textContent = "운영시간 " + hours;
       item.appendChild(detail);
     }
 
