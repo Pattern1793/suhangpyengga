@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>경기도 학교·도서관 지도</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:"Malgun Gothic",Arial,sans-serif;color:#263238}
+.app{display:flex;width:100%;height:100vh;overflow:hidden}
+.sidebar{width:370px;min-width:310px;display:flex;flex-direction:column;background:#fff;border-right:1px solid #ddd;z-index:2}
+.header{padding:20px;background:#f2f8fc;border-bottom:1px solid #e2e9ee}
+h1{font-size:20px;margin:0 0 8px}.header p{font-size:12px;line-height:1.6;color:#60717d;margin:0}
+.filters{padding:16px 18px;border-bottom:1px solid #eee}
+label.title{display:block;font-size:13px;font-weight:bold;margin:0 0 8px}
+select{width:100%;padding:10px;border:1px solid #d5dce2;border-radius:7px;background:#fff;margin-bottom:14px}
+.checks{display:flex;gap:10px;flex-wrap:wrap}.option{display:flex;align-items:center;gap:7px;padding:9px 10px;border:1px solid #e0e5e9;border-radius:8px;font-size:13px;cursor:pointer}
+.option input{accent-color:#477dba}.dot{width:11px;height:11px;border-radius:50%;display:inline-block}.school-dot{background:#63c5f2}.library-dot{background:#9bd85b}
+.status{padding:10px 18px;font-size:12px;line-height:1.6;background:#fafbfd;border-bottom:1px solid #eee;color:#536671;overflow-wrap:anywhere}
+.heading{display:flex;justify-content:space-between;align-items:center;padding:13px 18px 8px}.heading h2{font-size:15px;margin:0}.count{font-size:12px;color:#657681}
+.results{flex:1;overflow:auto;padding:0 10px 14px}.item{padding:12px 9px;border-bottom:1px solid #edf0f2;cursor:pointer;border-radius:6px}.item:hover{background:#f3f8fc}.name{font-size:13px;font-weight:bold;margin-bottom:5px}.tag{display:inline-block;font-size:10px;padding:3px 6px;border-radius:4px;margin-right:5px;font-weight:normal}.school-tag{background:#dff4ff;color:#176b94}.library-tag{background:#e9f8d9;color:#3f7020}.address,.detail{font-size:11px;line-height:1.55;color:#78858d;overflow-wrap:anywhere}.map-area{position:relative;flex:1;min-width:0;background:#edf2f4}#map{width:100%;height:100%}.legend{position:absolute;z-index:2;top:14px;right:14px;background:white;padding:10px 13px;border-radius:9px;box-shadow:0 2px 9px #0002;font-size:12px;line-height:2}.legend div{display:flex;align-items:center;gap:7px}.empty{padding:25px 10px;text-align:center;color:#7b8790;font-size:12px;line-height:1.7}
+.popup{max-width:270px;padding:12px 14px;font-size:12px;line-height:1.7;color:#263238}.popup strong{font-size:14px}.popup .popup-line{margin-top:4px;overflow-wrap:anywhere}.popup a{color:#176b94}
+@media(max-width:700px){.app{flex-direction:column}.sidebar{width:100%;min-width:0;height:49%;min-height:240px;border-right:0;border-bottom:1px solid #ddd}.header{padding:10px 14px}.header h1{font-size:17px}.filters{padding:10px 14px}.status{padding:7px 14px}.heading{padding:9px 14px}.map-area{flex:1;min-height:180px}.legend{top:7px;right:7px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <header class="header">
+      <h1>경기도 학교·도서관 지도</h1>
+      <p>학교와 도서관의 위치, 도서관의 오늘 휴관 여부와 운영시간을 확인해.</p>
+    </header>
+    <section class="filters">
+      <label class="title" for="citySelect">경기도 시·군 선택</label>
+      <select id="citySelect"><option value="">경기도 전체</option></select>
+      <label class="title">검색 대상</label>
+      <div class="checks">
+        <label class="option"><input type="checkbox" id="schoolCheck" checked><span class="dot school-dot"></span>중·고등학교</label>
+        <label class="option"><input type="checkbox" id="libraryCheck" checked><span class="dot library-dot"></span>도서관</label>
+      </div>
+    </section>
+    <div class="status" id="status">카카오맵을 불러오는 중이야.</div>
+    <div class="heading"><h2>검색 결과</h2><span class="count" id="resultCount">0곳</span></div>
+    <div class="results" id="results"><div class="empty">지도를 준비하고 있어.</div></div>
+  </aside>
+  <main class="map-area">
+    <div id="map"></div>
+    <div class="legend">
+      <div><span class="dot school-dot"></span>중·고등학교</div>
+      <div><span class="dot library-dot"></span>도서관</div>
+    </div>
+  </main>
+</div>
+
+<!-- 아래 키를 실제 카카오 JavaScript 키로 바꾸고, 카카오 개발자 콘솔에 실행 도메인을 등록해. -->
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=123456789&libraries=services&autoload=false"></script>
+<script>
+"use strict";
+
+// CSV 파일은 이 HTML 파일과 같은 폴더에 두고, 로컬 웹 서버로 실행해.
+// 업로드된 파일이 두 개라서 아래 두 파일을 연결했어.
+const SCHOOL_CSV = "./경기도중고등학교기본정보(1).csv";
+const LIBRARY_CSV = "./전국도서관표준데이터(3).csv";
+
+// 시·군 중심 좌표: 지역 선택 시 학교 주소를 지오코딩하고 도서관을 필터링할 때 사용해.
+const cityCenters = {
+  "가평군":[37.8315,127.5095],"고양시":[37.6584,126.8320],"과천시":[37.4292,126.9876],
+  "광명시":[37.4786,126.8644],"광주시":[37.4294,127.2551],"구리시":[37.5943,127.1295],
+  "군포시":[37.3616,126.9352],"김포시":[37.6153,126.7156],"남양주시":[37.6360,127.2165],
+  "동두천시":[37.9035,127.0606],"부천시":[37.5034,126.7660],"성남시":[37.4200,127.1265],
+  "수원시":[37.2636,127.0286],"시흥시":[37.3800,126.8029],"안산시":[37.3219,126.8309],
+  "안성시":[37.0080,127.2797],"안양시":[37.3943,126.9568],"양주시":[37.7853,127.0458],
+  "양평군":[37.4917,127.4875],"여주시":[37.2983,127.6374],"연천군":[38.0964,127.0751],
+  "오산시":[37.1498,127.0775],"용인시":[37.2411,127.1776],"의왕시":[37.3449,126.9683],
+  "의정부시":[37.7381,127.0337],"이천시":[37.2720,127.4350],"파주시":[37.7600,126.7800],
+  "평택시":[36.9921,127.1129],"포천시":[37.8949,127.2003],"하남시":[37.5393,127.2148],
+  "화성시":[37.1995,126.8312]
+};
+
+const colors = {school:"#63C5F2", library:"#9BD85B"};
+const citySelect = document.getElementById("citySelect");
+const schoolCheck = document.getElementById("schoolCheck");
+const libraryCheck = document.getElementById("libraryCheck");
+const statusEl = document.getElementById("status");
+const resultsEl = document.getElementById("results");
+const resultCountEl = document.getElementById("resultCount");
+
+let map, geocoder, infoWindow;
+let schoolRows = [], libraryRows = [];
+let schoolCoordinates = new Map();
+let visibleMarkers = [];
+let activePopupKey = null;
+let searchVersion = 0;
+let schoolGeocodeCache = {};
+
+const SCHOOL_CACHE_KEY = "gyeonggiSchoolGeocodeCacheV1";
+
+// CSV 파서: 쉼표가 들어간 따옴표 안의 값도 처리해.
+function parseCSV(text) {
+  const rows = [];
+  let row = [], value = "", quoted = false;
+  text = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i], next = text[i + 1];
+    if (char === '"' && quoted && next === '"') { value += '"'; i++; }
+    else if (char === '"') { quoted = !quoted; }
+    else if (char === "," && !quoted) { row.push(value); value = ""; }
+    else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i++;
+      row.push(value);
+      if (row.some(cell => cell.trim() !== "")) rows.push(row);
+      row = []; value = "";
+    } else value += char;
+  }
+  if (value.length || row.length) { row.push(value); rows.push(row); }
+  if (!rows.length) return [];
+  const headers = rows.shift().map(h => h.trim());
+  return rows.map(cells => {
+    const item = {};
+    headers.forEach((header, i) => item[header] = (cells[i] || "").trim());
+    return item;
+  });
+}
+
+async function loadCSV(path) {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(path + " 파일을 읽지 못했어. 파일명과 위치를 확인해 줘.");
+  return parseCSV(await response.text());
+}
+
+function normalize(value) {
+  return String(value || "").trim().replace(/\s+/g, " ");
+}
+
+function getSchoolCity(row) {
+  const address = normalize(row["도로명주소"]);
+  // 도로명주소가 경기도로 시작하면 시·군명을 주소에서 찾아.
+  return Object.keys(cityCenters).find(city => address.includes(city)) || "";
+}
+
+function getLibraryCity(row) {
+  return normalize(row["시군구명"]).replace(/\s/g, "");
+}
+
+function fillCityOptions() {
+  Object.keys(cityCenters).sort((a,b) => a.localeCompare(b,"ko")).forEach(city => {
+    const option = document.createElement("option");
+    option.value = city;
+    option.textContent = city;
+    citySelect.appendChild(option);
+  });
+}
+
+// 저장해 둔 학교 주소 좌표를 불러와 재검색 시간을 줄여.
+function loadGeocodeCache() {
+  try { schoolGeocodeCache = JSON.parse(localStorage.getItem(SCHOOL_CACHE_KEY) || "{}"); }
+  catch (_) { schoolGeocodeCache = {}; }
+}
+
+function saveGeocodeCache() {
+  try { localStorage.setItem(SCHOOL_CACHE_KEY, JSON.stringify(schoolGeocodeCache)); }
+  catch (_) { /* 저장 공간을 사용할 수 없어도 검색은 계속해. */ }
+}
+
+function initializeMap() {
+  const fallback = new kakao.maps.LatLng(37.2750, 127.0095);
+  map = new kakao.maps.Map(document.getElementById("map"), {center:fallback, level:5});
+  geocoder = new kakao.maps.services.Geocoder();
+  infoWindow = new kakao.maps.InfoWindow({zIndex:10});
+
+  // 지도에서 마커가 아닌 빈 공간을 누르면 열린 팝업을 닫아.
+  kakao.maps.event.addListener(map, "click", function() {
+    infoWindow.close();
+    activePopupKey = null;
+  });
+
+  loadGeocodeCache();
+  fillCityOptions();
+
+  // 현재 위치 권한을 요청하고, 실패하면 경기도 중심을 사용해.
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(position => {
+      map.setCenter(new kakao.maps.LatLng(position.coords.latitude, position.coords.longitude));
+      map.setLevel(5);
+      statusEl.textContent = "현재 위치를 중심으로 지도를 표시했어. CSV 데이터를 읽고 있어.";
+      loadData();
+    }, () => {
+      map.setCenter(fallback);
+      statusEl.textContent = "현재 위치를 확인하지 못했어. 경기도 중심에서 시작할게.";
+      loadData();
+    }, {enableHighAccuracy:false, timeout:8000, maximumAge:60000});
+  } else {
+    statusEl.textContent = "위치 기능을 지원하지 않아. 경기도 중심에서 시작할게.";
+    loadData();
+  }
+}
+
+async function loadData() {
+  try {
+    const loaded = await Promise.all([loadCSV(SCHOOL_CSV), loadCSV(LIBRARY_CSV)]);
+    schoolRows = loaded[0].filter(row => /중학교|고등학교/.test(row["학교종류명"] || ""));
+    libraryRows = loaded[1].filter(row => {
+      const address = normalize(row["소재지도로명주소"]);
+      return address.includes("경기도") || Object.keys(cityCenters).some(city => address.includes(city));
+    });
+    statusEl.textContent = `CSV 로드 완료: 중·고등학교 ${schoolRows.length}개, 경기도 도서관 ${libraryRows.length}개.`;
+    await refreshMap();
+  } catch (error) {
+    statusEl.textContent = error.message + " index.html과 CSV 파일을 같은 폴더에 두고 로컬 웹 서버로 실행해 줘.";
+    resultsEl.innerHTML = '<div class="empty">CSV를 불러오지 못했어.<br>파일명과 웹 서버 실행 여부를 확인해 줘.</div>';
+  }
+}
+
+citySelect.addEventListener("change", refreshMap);
+schoolCheck.addEventListener("change", refreshMap);
+libraryCheck.addEventListener("change", refreshMap);
+
+// 현재 선택된 지역·종류만 지도에 다시 표시해.
+async function refreshMap() {
+  if (!map || !schoolRows.length && !libraryRows.length) return;
+  const version = ++searchVersion;
+  clearMapMarkers();
+
+  const city = citySelect.value;
+  const wantsSchools = schoolCheck.checked;
+  const wantsLibraries = libraryCheck.checked;
+
+  if (!wantsSchools && !wantsLibraries) {
+    statusEl.textContent = "학교 또는 도서관을 하나 이상 선택해 줘.";
+    renderList([]);
+    return;
+  }
+
+  const libraries = wantsLibraries ? libraryRows.filter(row => {
+    const rowCity = getLibraryCity(row);
+    return !city || rowCity === city.replace(/\s/g, "");
+  }) : [];
+
+  const schools = wantsSchools ? schoolRows.filter(row => !city || getSchoolCity(row) === city) : [];
+  const places = [];
+
+  // 도서관은 CSV의 위도·경도를 먼저 사용하고, 좌표가 없을 때만 주소를 검색해.
+  libraries.forEach((row, index) => {
+    const lat = Number(row["위도"]), lng = Number(row["경도"]);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat > 30 && lat < 40 && lng > 120 && lng < 135) {
+      places.push(makeLibraryPlace(row, lat, lng, index));
+    } else if (row["소재지도로명주소"]) {
+      // 좌표가 비어 있는 도서관 주소는 비동기 지오코딩 대상으로 둬.
+      places.push({...makeLibraryPlace(row, null, null, index), addressToGeocode:row["소재지도로명주소"]});
+    }
+  });
+
+  renderList(places.filter(p => p.lat && p.lng));
+  statusEl.textContent = `도서관 ${places.filter(p => p.lat && p.lng).length}곳 표시 중. 학교 주소를 좌표로 변환하고 있어.`;
+
+  // 학교 CSV에는 좌표가 없으므로 도로명주소를 카카오 주소 검색으로 변환해.
+  // 전체 지역을 선택하면 학교가 많아 시간이 걸릴 수 있어. 좌표는 브라우저에 캐시돼.
+  let done = 0, successful = 0;
+  const schoolPlaces = [];
+
+  for (const row of schools) {
+    if (version !== searchVersion) return;
+    const address = normalize(row["도로명주소"]);
+    if (!address) continue;
+
+    let coordinate = schoolGeocodeCache[address];
+    if (!coordinate) {
+      coordinate = await geocodeAddress(address, version);
+      if (version !== searchVersion) return;
+      if (coordinate) {
+        schoolGeocodeCache[address] = coordinate;
+        // 일정 횟수마다 캐시에 저장해 중간에 페이지가 닫혀도 결과를 보존해.
+        if (done % 20 === 0) saveGeocodeCache();
+      }
+    }
+
+    if (coordinate) {
+      schoolPlaces.push({
+        key:"school-" + (row["행정표준코드"] || row["학교명"] + address),
+        type:"school",
+        name:normalize(row["학교명"]),
+        address:address,
+        lat:coordinate.lat,
+        lng:coordinate.lng,
+        row:row
+      });
+      successful++;
+    }
+
+    done++;
+    if (done % 10 === 0 || done === schools.length) {
+      statusEl.textContent = `학교 주소 변환 중 ${done}/${schools.length} · 위치 확인 ${successful}곳`;
+      // 너무 많은 지오코딩 요청을 연속으로 보내지 않도록 잠시 기다려.
+      await delay(100);
+    }
+  }
+
+  if (version !== searchVersion) return;
+  saveGeocodeCache();
+
+  const finalPlaces = places.filter(p => p.lat && p.lng).concat(schoolPlaces);
+  renderList(finalPlaces);
+  finalPlaces.forEach(place => addMarker(place));
+
+  statusEl.textContent = `표시 완료: 학교 ${schoolPlaces.length}곳, 도서관 ${places.filter(p => p.lat && p.lng).length}곳.`;
+}
+
+function makeLibraryPlace(row, lat, lng, index) {
+  return {
+    key:"library-" + index + "-" + normalize(row["도서관명"]),
+    type:"library",
+    name:normalize(row["도서관명"]),
+    address:normalize(row["소재지도로명주소"]),
+    lat:lat,
+    lng:lng,
+    row:row
+  };
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function geocodeAddress(address, version) {
+  return new Promise(resolve => {
+    if (version !== searchVersion) return resolve(null);
+    geocoder.addressSearch(address, (data, status) => {
+      if (version !== searchVersion) return resolve(null);
+      if (status === kakao.maps.services.Status.OK && data.length) {
+        const lat = Number(data[0].y), lng = Number(data[0].x);
+        // 변환된 좌표가 경기도 범위를 크게 벗어나면 제외해.
+        if (lat >= 36.8 && lat <= 38.4 && lng >= 126.3 && lng <= 127.9) {
+          resolve({lat, lng});
+        } else resolve(null);
+      } else resolve(null);
+    });
+  });
+}
+
+function clearMapMarkers() {
+  visibleMarkers.forEach(marker => marker.setMap(null));
+  visibleMarkers = [];
+  infoWindow.close();
+  activePopupKey = null;
+}
+
+function renderList(places) {
+  resultsEl.replaceChildren();
+  resultCountEl.textContent = `${places.length}곳`;
+
+  if (!places.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "표시할 장소가 없어. 지역이나 검색 대상을 확인해 줘.";
+    resultsEl.appendChild(empty);
+    return;
+  }
+
+  places.forEach(place => {
+    const item = document.createElement("div");
+    item.className = "item";
+
+    const name = document.createElement("div");
+    name.className = "name";
+    const tag = document.createElement("span");
+    tag.className = "tag " + (place.type === "school" ? "school-tag" : "library-tag");
+    tag.textContent = place.type === "school" ? "학교" : "도서관";
+    name.append(tag, document.createTextNode(place.name));
+
+    const address = document.createElement("div");
+    address.className = "address";
+    address.textContent = place.address || "주소 정보 없음";
+    item.append(name, address);
+
+    if (place.type === "library") {
+      const hours = getTodayHours(place.row);
+      const closed = isClosedToday(place.row["휴관일"], new Date());
+      const detail = document.createElement("div");
+      detail.className = "detail";
+      detail.textContent = (closed ? "오늘 휴관 가능성 있음" : "오늘 휴관일 규칙 확인 필요") + " · 운영시간 " + hours;
+      item.appendChild(detail);
+    }
+
+    item.addEventListener("click", () => {
+      if (place.lat == null || place.lng == null) return;
+      map.panTo(new kakao.maps.LatLng(place.lat, place.lng));
+      const marker = visibleMarkers.find(m => m.placeKey === place.key);
+      if (marker) togglePopup(place, marker);
+    });
+    resultsEl.appendChild(item);
+  });
+}
+
+// 학교는 하늘색, 도서관은 연두색 원형 마커로 표시해.
+function addMarker(place) {
+  const position = new kakao.maps.LatLng(place.lat, place.lng);
+  const content = document.createElement("button");
+  content.type = "button";
+  content.title = place.name;
+  content.setAttribute("aria-label", place.name);
+  content.style.cssText = `width:15px;height:15px;padding:0;border:2px solid white;border-radius:50%;background:${colors[place.type]};box-shadow:0 1px 4px #0006;cursor:pointer;display:block;`;
+
+  const marker = new kakao.maps.CustomOverlay({
+    position, content, yAnchor:0.5, xAnchor:0.5, zIndex:place.type === "library" ? 3 : 2
+  });
+  marker.setMap(map);
+  marker.placeKey = place.key;
+  marker.placeData = place;
+  visibleMarkers.push(marker);
+
+  content.addEventListener("click", event => {
+    event.stopPropagation();
+    togglePopup(place, marker);
+  });
+}
+
+function togglePopup(place, marker) {
+  // 이미 열린 장소를 다시 누르면 팝업을 닫아.
+  if (activePopupKey === place.key) {
+    infoWindow.close();
+    activePopupKey = null;
+    return;
+  }
+  activePopupKey = place.key;
+  infoWindow.setContent(buildPopup(place));
+  infoWindow.setPosition(new kakao.maps.LatLng(place.lat, place.lng));
+  infoWindow.open(map);
+}
+
+function escapeHTML(value) {
+  return String(value == null ? "" : value).replace(/[&<>"']/g, char => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
+  }[char]));
+}
+
+function buildPopup(place) {
+  let html = `<div class="popup"><strong>${escapeHTML(place.name)}</strong>`;
+  if (place.address) html += `<div class="popup-line">${escapeHTML(place.address)}</div>`;
+
+  if (place.type === "library") {
+    const row = place.row || {};
+    const closedText = getClosedText(row["휴관일"], new Date());
+    const hours = getTodayHours(row);
+    html += `<div class="popup-line"><b>오늘 휴관 여부:</b> ${escapeHTML(closedText)}</div>`;
+    html += `<div class="popup-line"><b>오늘 운영시간:</b> ${escapeHTML(hours)}</div>`;
+    if (row["휴관일"]) html += `<div class="popup-line"><b>등록된 휴관일:</b> ${escapeHTML(row["휴관일"])}</div>`;
+    if (row["도서관전화번호"]) html += `<div class="popup-line"><b>전화:</b> ${escapeHTML(row["도서관전화번호"])}</div>`;
+    if (row["홈페이지주소"]) {
+      let url = normalize(row["홈페이지주소"]);
+      if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+      if (/^https?:\/\//i.test(url)) {
+        html += `<div class="popup-line"><a href="${escapeHTML(url)}" target="_blank" rel="noopener noreferrer">도서관 홈페이지</a></div>`;
+      }
+    }
+  }
+  return html + "</div>";
+}
+
+function getTodayHours(row) {
+  const date = new Date();
+  const day = date.getDay();
+  const closedText = normalize(row["휴관일"]);
+  const publicHoliday = isPublicHoliday(date);
+
+  // 휴관일 규칙에 공휴일이 포함되어 있고 오늘이 공휴일이면 공휴일 시간을 적용해.
+  if (publicHoliday && /공휴일/.test(closedText)) {
+    return formatHours(row["공휴일운영시작시각"], row["공휴일운영종료시각"]);
+  }
+  if (day === 0 || day === 6) {
+    return day === 6
+      ? formatHours(row["토요일운영시작시각"], row["토요일운영종료시각"])
+      : formatHours(row["공휴일운영시작시각"], row["공휴일운영종료시각"]);
+  }
+  return formatHours(row["평일운영시작시각"], row["평일운영종료시각"]);
+}
+
+function formatHours(start, end) {
+  const a = formatTime(start), b = formatTime(end);
+  if (!a && !b) return "운영시간 정보 없음";
+  return `${a || "--:--"}-${b || "--:--"}`;
+}
+
+function formatTime(value) {
+  const text = normalize(value);
+  if (!text) return "";
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return text;
+  return match[1].padStart(2, "0") + ":" + match[2];
+}
+
+function isPublicHoliday(date) {
+  // 브라우저만으로 음력 명절과 대체공휴일 전체를 정확히 판별할 수는 없어.
+  // 아래는 매년 날짜가 같은 대표 공휴일만 처리하고, 휴관일 원문도 함께 보여 줘.
+  const month = date.getMonth() + 1, day = date.getDate();
+  const fixed = ["1-1","3-1","5-5","6-6","8-15","10-3","10-9","12-25"];
+  return fixed.includes(`${month}-${day}`);
+}
+
+function isClosedToday(holidayText, date) {
+  const text = normalize(holidayText);
+  if (!text) return false;
+
+  const dayNames = ["일요일","월요일","화요일","수요일","목요일","금요일","토요일"];
+  const todayName = dayNames[date.getDay()];
+
+  // 휴관일 텍스트에 요일이 명시되어 있는 경우를 확인해.
+  if (text.includes(todayName)) return true;
+  if (date.getDay() === 0 && /매주\s*일요일|일요일/.test(text)) return true;
+  if (date.getDay() === 1 && /매주\s*월요일|월요일/.test(text)) return true;
+
+  // 매년 반복되는 양력 날짜 형식(예: 1월 1일)이 명시된 경우를 확인해.
+  const datePattern = new RegExp(`${date.getMonth()+1}\\s*월\\s*${date.getDate()}\\s*일`);
+  if (datePattern.test(text)) return true;
+
+  if (isPublicHoliday(date) && /공휴일/.test(text)) return true;
+  return false;
+}
+
+function getClosedText(holidayText, date) {
+  if (isClosedToday(holidayText, date)) return "휴관일 규칙에 해당할 수 있어";
+  if (!normalize(holidayText)) return "휴관일 정보 없음";
+  return "등록된 휴관일 규칙과 일치하지 않음";
+}
+
+// 날짜가 바뀌면 휴관일·운영시간을 다시 계산하고 목록의 내용을 갱신해.
+// CSV 원본 자체가 바뀌는 것은 아니므로, 최신 데이터 파일은 별도로 받아야 해.
+function scheduleDailyRefresh() {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 2);
+  setTimeout(() => {
+    const currentPlaces = visibleMarkers.map(marker => marker.placeData);
+    renderList(currentPlaces);
+    scheduleDailyRefresh();
+  }, nextMidnight - now);
+}
+
+window.addEventListener("load", function() {
+  if (!window.kakao || !kakao.maps) {
+    statusEl.textContent = "카카오맵 SDK를 불러오지 못했어. JavaScript 키와 도메인 설정을 확인해 줘.";
+    return;
+  }
+  kakao.maps.load(function() {
+    initializeMap();
+    scheduleDailyRefresh();
+  });
+});
+</script>
+</body>
+</html>
